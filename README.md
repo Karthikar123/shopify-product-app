@@ -48,12 +48,6 @@ http://localhost:8000/products
 
 
 
-Available Artisan Commands
-Use Laravel Tinker to test the product import manually:
-php artisan tinker
->>> app(App\Services\ShopifyProductService::class)->fetchAndStoreProducts()
-
-
 Sample Data Structure
 Each product saved includes:
 {
