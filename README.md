@@ -47,19 +47,6 @@ Then visit:
 http://localhost:8000/products
 
 
-Folder & File Structure
-    • app/Services/ShopifyProductService.php
-        ◦ Core logic for connecting to Shopify, parsing data, and saving to the database.
-    • routes/web.php
-        ◦ Web routes for:
-            ▪ /products → Display product view
-            ▪ /import-shopify → Trigger product import
-    • resources/views/products.blade.php
-        ◦ Displays the product list using Blade components.
-    • database/migrations/
-        ◦ Contains the migration to create the products table.
-    • .env.example
-        ◦ Template for your environment variables.
 
 Available Artisan Commands
 Use Laravel Tinker to test the product import manually:
