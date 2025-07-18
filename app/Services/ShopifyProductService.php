@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log; // ✅ Add this to fix Undefined type 'Log'
+use Illuminate\Support\Facades\Log; 
 use App\Models\Product;
 
 class ShopifyProductService
