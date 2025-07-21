@@ -6,24 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('products', function (Blueprint $table) {
             $table->id(); // Auto-increment primary key
             $table->bigInteger('shopify_product_id')->unique(); // Shopify's product ID
             $table->string('title'); // Product title
-            $table->decimal('price', 10, 2); // Product price
+            $table->decimal('price', 10, 2)->nullable(); // Product price
             $table->json('metafields')->nullable(); // JSON field for metafields
+            $table->string('image_url')->nullable(); // Product image
+            $table->integer('inventory_quantity')->nullable(); // Inventory
+            $table->string('sku')->nullable(); // SKU
+            $table->longText('body_html')->nullable(); // Product description
             $table->timestamps(); // created_at & updated_at
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('products');

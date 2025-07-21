@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log; 
+use Illuminate\Support\Facades\Log;
 use App\Models\Product;
 
 class ShopifyProductService
@@ -14,46 +14,79 @@ class ShopifyProductService
         $token = env('SHOPIFY_ACCESS_TOKEN');
 
         if (!$shop || !$token) {
-            Log::error('Shopify credentials are missing in .env');
+            Log::error('❌ Shopify credentials are missing in .env');
             throw new \Exception('Missing Shopify credentials');
         }
 
-        $url = "https://{$shop}/admin/api/2024-07/products.json";
+        $limit = 250;
+        $baseUrl = "https://{$shop}/admin/api/2024-07/products.json?limit={$limit}";
+        $url = $baseUrl;
 
-        Log::info("Fetching Shopify products from: " . $url);
+        do {
+            Log::info("📦 Fetching products from: {$url}");
 
-        $response = Http::withHeaders([
-            'X-Shopify-Access-Token' => $token,
-            'Content-Type' => 'application/json',
-        ])->get($url);
+            $response = Http::withHeaders([
+                'X-Shopify-Access-Token' => $token,
+                'Content-Type' => 'application/json',
+            ])->get($url);
 
-        if (!$response->successful()) {
-            Log::error('Shopify API error: ' . $response->body());
-            throw new \Exception('Failed to fetch products from Shopify: ' . $response->body());
-        }
+            if (!$response->successful()) {
+                Log::error('❌ Shopify API error: ' . $response->body());
+                throw new \Exception('Failed to fetch products from Shopify: ' . $response->body());
+            }
 
-        $products = $response->json('products') ?? [];
+            $products = $response->json('products') ?? [];
 
-        foreach ($products as $product) {
-            $price = $product['variants'][0]['price'] ?? 0.00;
-            $metafields = $this->fetchMetafields($product['id'], $shop, $token);
+            Log::info("🧮 Fetched " . count($products) . " products.");
 
-            Product::updateOrCreate(
+            foreach ($products as $product) {
+                try {
+                    $existingProduct = Product::where('shopify_product_id', $product['id'])->first();
+
+                    // ✅ Skip manually edited products
+                    if ($existingProduct && $existingProduct->is_edited) {
+                        Log::info("⏭️ Skipping manually edited product ID {$product['id']}");
+                        continue;
+                    }
+
+                    $price = $product['variants'][0]['price'] ?? 0.00;
+                    $metafields = $this->fetchMetafields($product['id'], $shop, $token);
+
+                    Product::updateOrCreate(
     ['shopify_product_id' => $product['id']],
     [
         'title' => $product['title'],
         'price' => $price,
-        'metafields' => json_encode($metafields),
+        'metafields' => $metafields,
         'image_url' => $product['image']['src'] ?? null,
         'inventory_quantity' => $product['variants'][0]['inventory_quantity'] ?? null,
         'sku' => $product['variants'][0]['sku'] ?? null,
         'body_html' => $product['body_html'] ?? null,
+        'is_edited' => $existingProduct ? $existingProduct->is_edited : false,
     ]
 );
 
+                } catch (\Exception $e) {
+                    Log::error("❌ Failed to sync product ID {$product['id']}: " . $e->getMessage());
+                }
+            }
+
+            $linkHeader = $response->header('Link');
+            $url = $this->getNextPageUrl($linkHeader);
+
+        } while ($url);
+
+        Log::info('✅ All Shopify products imported successfully.');
+    }
+
+    private function getNextPageUrl($linkHeader)
+    {
+        if (!$linkHeader) {
+            return null;
         }
 
-        Log::info('Products imported successfully');
+        preg_match('/<([^>]+)>; rel="next"/', $linkHeader, $matches);
+        return $matches[1] ?? null;
     }
 
     private function fetchMetafields($productId, $shop, $token)
@@ -66,10 +99,18 @@ class ShopifyProductService
         ])->get($url);
 
         if (!$response->successful()) {
-            Log::warning("Failed to fetch metafields for Product ID: {$productId}");
+            Log::warning("⚠️ Failed to fetch metafields for Product ID: {$productId}");
             return [];
         }
 
-        return $response->json('metafields') ?? [];
+        $rawMetafields = $response->json('metafields') ?? [];
+
+        $flattened = [];
+        foreach ($rawMetafields as $field) {
+            $key = $field['namespace'] . '.' . $field['key'];
+            $flattened[$key] = $field['value'];
+        }
+
+        return $flattened;
     }
 }

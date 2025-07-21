@@ -18,19 +18,36 @@
 
         table {
             background-color: white;
+            font-size: 14px;
         }
 
-        .metafield-list {
-            max-height: 200px;
-            overflow-y: auto;
+        th, td {
+            vertical-align: middle !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        pre {
-            background: #f1f1f1;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 13px;
+        th {
+            font-weight: 600;
         }
+
+        td img {
+            max-height: 80px;
+            max-width: 80px;
+            object-fit: contain;
+        }
+
+        .w-img    { width: 90px; }
+        .w-title  { width: 180px; }
+        .w-price,
+        .w-sku,
+        .w-stock  { width: 80px; }
+        .w-meta {
+            min-width: 80px;
+            max-width: 120px;
+        }
+        .w-actions { width: 90px; }
     </style>
 </head>
 <body>
@@ -38,70 +55,77 @@
 <div class="container">
     <h1>Shopify Products</h1>
 
+    @if(session('success'))
+        <div class="alert alert-success text-center">{{ session('success') }}</div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-danger text-center">{{ session('error') }}</div>
+    @endif
+
+    <div class="d-flex justify-content-end mb-3">
+        <a href="{{ route('products.sync.now') }}" class="btn btn-success">
+            🔄 Sync Now from Shopify
+        </a>
+    </div>
+
     <div class="table-responsive">
-        <table class="table table-bordered table-hover align-middle text-center">
+        <table class="table table-bordered table-hover text-center align-middle">
             <thead class="table-dark">
                 <tr>
-                    <th>Image</th>
-                    <th>Title</th>
-                    <th>Price (₹)</th>
-                    <th>SKU</th>
-                    <th>Inventory</th>
-                    <th>Metafields</th>
+                    <th class="w-img">Image</th>
+                    <th class="w-title text-start">Product Title</th>
+                    <th class="w-price">Price (₹)</th>
+                    <th class="w-sku">SKU</th>
+                    <th class="w-stock">Stock</th>
+
+                    @php
+                        $pinnedKeys = ['origin', 'feature', 'care_guide', 'fabric_care'];
+                    @endphp
+
+                    @foreach ($pinnedKeys as $key)
+                        <th class="w-meta">{{ ucwords(str_replace('_', ' ', $key)) }}</th>
+                    @endforeach
+
+                    <th class="w-actions">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach ($products as $product)
+                @forelse ($products as $product)
                     @php
-                        $metafields = is_array($product->metafields)
+                        $metafieldMap = is_array($product->metafields)
                             ? $product->metafields
-                            : json_decode($product->metafields, true);
+                            : (json_decode($product->metafields, true) ?? []);
                     @endphp
+
                     <tr>
-                        <td style="width: 100px;">
+                        <td>
                             @if ($product->image_url)
-                                <img src="{{ $product->image_url }}" alt="Image" class="img-fluid rounded" style="max-height: 100px;">
+                                <img src="{{ $product->image_url }}" alt="Product Image" class="img-thumbnail">
                             @else
-                                <span class="text-muted">No image</span>
+                                <span class="text-muted">No Image</span>
                             @endif
                         </td>
-                        <td>{{ $product->title }}</td>
-                        <td>₹{{ number_format($product->price, 2) }}</td>
+                        <td class="text-start">{{ $product->title }}</td>
+                        <td>₹{{ number_format($product->price ?? 0, 2) }}</td>
                         <td>{{ $product->sku ?? 'N/A' }}</td>
                         <td>{{ $product->inventory_quantity ?? 'N/A' }}</td>
-                        <td class="text-start">
-                            @if (!empty($metafields))
-                                <div class="metafield-list">
-                                    <ul class="list-unstyled">
-                                        @foreach ($metafields as $key => $meta)
-                                            <li>
-                                                <strong>{{ ucfirst(str_replace(['_', '-'], ' ', $key)) }}:</strong>
-                                                <div class="metafield-value mt-1">
-                                                    @php
-                                                        if (is_array($meta)) {
-                                                            echo '<pre>' . json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>';
-                                                        } elseif (is_string($meta) && str_starts_with($meta, '{')) {
-                                                            $decoded = json_decode($meta, true);
-                                                            if (json_last_error() === JSON_ERROR_NONE) {
-                                                                echo '<pre>' . json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>';
-                                                            } else {
-                                                                echo e($meta);
-                                                            }
-                                                        } else {
-                                                            echo e($meta);
-                                                        }
-                                                    @endphp
-                                                </div>
-                                            </li>
-                                        @endforeach
-                                    </ul>
-                                </div>
-                            @else
-                                <span class="text-muted">No metafields</span>
-                            @endif
+
+                        @foreach ($pinnedKeys as $key)
+                            <td class="text-start w-meta">
+                                {{ $metafieldMap[$key] ?? 'N/A' }}
+                            </td>
+                        @endforeach
+
+                        <td>
+                            <a href="{{ route('products.edit', $product->id) }}" class="btn btn-sm btn-primary">Edit</a>
                         </td>
                     </tr>
-                @endforeach
+                @empty
+                    <tr>
+                        <td colspan="100%" class="text-center">No products found.</td>
+                    </tr>
+                @endforelse
             </tbody>
         </table>
     </div>

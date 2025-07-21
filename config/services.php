@@ -23,7 +23,7 @@ return [
         ],
     ],
 
-    // ✅ Shopify config using correct env keys
+
     'shopify' => [
         'store_domain' => env('SHOPIFY_STORE_DOMAIN'),
         'access_token' => env('SHOPIFY_ACCESS_TOKEN'),

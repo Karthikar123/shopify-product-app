@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    public function fetchProductsWithMetafields()
+    public function syncFromShopify()
     {
         $storeDomain = env('SHOPIFY_STORE_DOMAIN');
         $accessToken = env('SHOPIFY_ACCESS_TOKEN');
@@ -26,9 +26,11 @@ class ProductController extends Controller
               node {
                 id
                 title
+                descriptionHtml
                 variants(first: 1) {
                   edges {
                     node {
+                      id
                       price
                       sku
                       inventoryQuantity
@@ -71,9 +73,7 @@ class ProductController extends Controller
         $response = Http::withHeaders([
             'X-Shopify-Access-Token' => $accessToken,
             'Content-Type' => 'application/json',
-        ])->post($url, [
-            'query' => $query
-        ]);
+        ])->post($url, ['query' => $query]);
 
         if (!$response->successful()) {
             return response()->json(['error' => 'Failed to fetch products from Shopify GraphQL'], 500);
@@ -87,53 +87,47 @@ class ProductController extends Controller
             $shopifyId = $this->extractIdFromGid($node['id']);
             $shopifyProductIds[] = $shopifyId;
 
+            // Skip manually edited products
+            $existingProduct = Product::where('shopify_product_id', $shopifyId)->first();
+            if ($existingProduct && $existingProduct->is_edited) {
+                continue;
+            }
+
             $variant = $node['variants']['edges'][0]['node'] ?? null;
+            $shopifyVariantId = isset($variant['id']) ? $this->extractIdFromGid($variant['id']) : null;
 
             $metafields = [];
-
             foreach ($node['metafields']['edges'] as $metaEdge) {
                 $meta = $metaEdge['node'];
-
-                $metafield = [
-                    'namespace' => $meta['namespace'],
-                    'key'       => $meta['key'],
-                    'type'      => $meta['type'],
-                    'value'     => $meta['value'],
-                    'updatedAt' => $meta['updatedAt'],
-                ];
-
                 if ($meta['type'] === 'metaobject_reference' && isset($meta['reference'])) {
-                    $fields = $meta['reference']['fields'];
-                    $resolved = [];
-                    foreach ($fields as $field) {
-                        $resolved[$field['key']] = $field['value'];
+                    foreach ($meta['reference']['fields'] as $field) {
+                        $metafields[$meta['key']][$field['key']] = $field['value'];
                     }
-                    $metafield['value'] = $resolved;
+                } else {
+                    $metafields[$meta['key']] = $meta['value'];
                 }
-
-                $metafields[] = $metafield;
             }
 
             Product::updateOrCreate(
                 ['shopify_product_id' => $shopifyId],
                 [
+                    'shopify_variant_id' => $shopifyVariantId,
                     'title' => $node['title'],
+                    'body_html' => $node['descriptionHtml'] ?? null,
                     'price' => $variant['price'] ?? null,
                     'sku' => $variant['sku'] ?? null,
                     'inventory_quantity' => $variant['inventoryQuantity'] ?? 0,
                     'image_url' => $node['images']['edges'][0]['node']['transformedSrc'] ?? null,
                     'metafields' => $metafields,
+'is_edited' => $existingProduct ? $existingProduct->is_edited : false,
                 ]
             );
         }
 
-        // Remove deleted products
         Product::whereNotIn('shopify_product_id', $shopifyProductIds)->delete();
 
-        return response()->json([
-            'message' => 'Products synced successfully.',
-            'fetched' => count($products),
-        ]);
+        return redirect()->route('products.list')
+            ->with('success', 'Products synced successfully!');
     }
 
     public function showProducts()
@@ -142,8 +136,64 @@ class ProductController extends Controller
         return view('products.index', compact('products'));
     }
 
+    public function edit($id)
+    {
+        $product = Product::findOrFail($id);
+        return view('products.edit', compact('product'));
+    }
+
+    public function update(Request $request, $id)
+    {
+        $request->validate([
+            'title' => 'required|string',
+            'price' => 'nullable|numeric',
+            'metafields' => 'nullable|array',
+        ]);
+
+        $product = Product::findOrFail($id);
+
+        // Local DB update
+        $product->title = $request->input('title');
+        $product->price = $request->input('price');
+        $product->metafields = $request->input('metafields', []);
+        $product->is_edited = true;
+        $product->save();
+
+        // Sync to Shopify
+        $storeDomain = env('SHOPIFY_STORE_DOMAIN');
+        $accessToken = env('SHOPIFY_ACCESS_TOKEN');
+
+        $shopifyProductId = $product->shopify_product_id;
+        $shopifyVariantId = $product->shopify_variant_id;
+
+        if ($storeDomain && $accessToken && $shopifyProductId && $shopifyVariantId) {
+            $response = Http::withHeaders([
+                'X-Shopify-Access-Token' => $accessToken,
+                'Content-Type' => 'application/json',
+            ])->put("https://{$storeDomain}/admin/api/2024-07/products/{$shopifyProductId}.json", [
+                'product' => [
+                    'id' => $shopifyProductId,
+                    'title' => $product->title,
+                    'variants' => [
+                        [
+                            'id' => $shopifyVariantId,
+                            'price' => $product->price,
+                        ]
+                    ],
+                ]
+            ]);
+
+            if (!$response->successful()) {
+                return redirect()->back()->with('error', 'Local update saved, but failed to sync with Shopify.');
+            }
+        }
+
+        return redirect()->route('products.edit', $product->id)
+            ->with('success', 'Product updated locally and synced to Shopify!');
+    }
+
     private function extractIdFromGid($gid)
     {
-        return basename($gid);
+        return last(explode('/', $gid));
     }
 }
