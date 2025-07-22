@@ -8,6 +8,12 @@ use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
+    /**
+     * Fetches products from Shopify GraphQL API and syncs them with the local database.
+     * - Skips locally edited products.
+     * - Updates or creates product records.
+     * - Deletes products not present in the latest Shopify response.
+     */
     public function syncFromShopify()
     {
         $storeDomain = env('SHOPIFY_STORE_DOMAIN');
@@ -19,6 +25,7 @@ class ProductController extends Controller
 
         $url = "https://{$storeDomain}/admin/api/2024-07/graphql.json";
 
+        // GraphQL query to fetch products, variants, metafields, and images
         $query = <<<GRAPHQL
         {
           products(first: 100) {
@@ -96,6 +103,7 @@ class ProductController extends Controller
             $variant = $node['variants']['edges'][0]['node'] ?? null;
             $shopifyVariantId = isset($variant['id']) ? $this->extractIdFromGid($variant['id']) : null;
 
+            // Parse metafields
             $metafields = [];
             foreach ($node['metafields']['edges'] as $metaEdge) {
                 $meta = $metaEdge['node'];
@@ -108,6 +116,7 @@ class ProductController extends Controller
                 }
             }
 
+            // Save or update product locally
             Product::updateOrCreate(
                 ['shopify_product_id' => $shopifyId],
                 [
@@ -119,29 +128,44 @@ class ProductController extends Controller
                     'inventory_quantity' => $variant['inventoryQuantity'] ?? 0,
                     'image_url' => $node['images']['edges'][0]['node']['transformedSrc'] ?? null,
                     'metafields' => $metafields,
-'is_edited' => $existingProduct ? $existingProduct->is_edited : false,
+                    'is_edited' => $existingProduct ? $existingProduct->is_edited : false,
                 ]
             );
         }
 
+        // Delete local products that are no longer in Shopify
         Product::whereNotIn('shopify_product_id', $shopifyProductIds)->delete();
 
         return redirect()->route('products.list')
             ->with('success', 'Products synced successfully!');
     }
 
+    /**
+     * Displays all synced products in a view.
+     */
     public function showProducts()
     {
         $products = Product::all();
         return view('products.index', compact('products'));
     }
 
+    /**
+     * Loads the edit view for a specific product.
+     * 
+     * @param int $id Product ID
+     */
     public function edit($id)
     {
         $product = Product::findOrFail($id);
         return view('products.edit', compact('product'));
     }
 
+    /**
+     * Updates a product locally and attempts to sync the changes back to Shopify.
+     * 
+     * @param Request $request
+     * @param int $id Product ID
+     */
     public function update(Request $request, $id)
     {
         $request->validate([
@@ -152,14 +176,14 @@ class ProductController extends Controller
 
         $product = Product::findOrFail($id);
 
-        // Local DB update
+        // Update local DB record
         $product->title = $request->input('title');
         $product->price = $request->input('price');
         $product->metafields = $request->input('metafields', []);
         $product->is_edited = true;
         $product->save();
 
-        // Sync to Shopify
+        // Sync update to Shopify
         $storeDomain = env('SHOPIFY_STORE_DOMAIN');
         $accessToken = env('SHOPIFY_ACCESS_TOKEN');
 
@@ -192,6 +216,13 @@ class ProductController extends Controller
             ->with('success', 'Product updated locally and synced to Shopify!');
     }
 
+    /**
+     * Extracts the numeric ID from a Shopify GID (Global ID format).
+     * Example: gid://shopify/Product/12345678 → 12345678
+     * 
+     * @param string $gid
+     * @return string
+     */
     private function extractIdFromGid($gid)
     {
         return last(explode('/', $gid));

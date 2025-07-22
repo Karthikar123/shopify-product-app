@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>Shopify Products</title>
+
+    {{-- Bootstrap 5 CSS --}}
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    {{-- Custom Styling for Layout --}}
     <style>
         body {
             background-color: #f8f9fa;
@@ -38,12 +42,13 @@
             object-fit: contain;
         }
 
+        /* Column width helpers */
         .w-img    { width: 90px; }
         .w-title  { width: 180px; }
         .w-price,
         .w-sku,
         .w-stock  { width: 80px; }
-        .w-meta {
+        .w-meta   {
             min-width: 80px;
             max-width: 120px;
         }
@@ -53,8 +58,10 @@
 <body>
 
 <div class="container">
+    {{-- Page Title --}}
     <h1>Shopify Products</h1>
 
+    {{-- Success and Error Messages --}}
     @if(session('success'))
         <div class="alert alert-success text-center">{{ session('success') }}</div>
     @endif
@@ -63,12 +70,14 @@
         <div class="alert alert-danger text-center">{{ session('error') }}</div>
     @endif
 
+    {{-- Manual Sync Button --}}
     <div class="d-flex justify-content-end mb-3">
         <a href="{{ route('products.sync.now') }}" class="btn btn-success">
             🔄 Sync Now from Shopify
         </a>
     </div>
 
+    {{-- Product Table --}}
     <div class="table-responsive">
         <table class="table table-bordered table-hover text-center align-middle">
             <thead class="table-dark">
@@ -79,10 +88,12 @@
                     <th class="w-sku">SKU</th>
                     <th class="w-stock">Stock</th>
 
+                    {{-- Define the pinned metafields you want to show as columns --}}
                     @php
                         $pinnedKeys = ['origin', 'feature', 'care_guide', 'fabric_care'];
                     @endphp
 
+                    {{-- Render each pinned metafield column heading --}}
                     @foreach ($pinnedKeys as $key)
                         <th class="w-meta">{{ ucwords(str_replace('_', ' ', $key)) }}</th>
                     @endforeach
@@ -91,14 +102,17 @@
                 </tr>
             </thead>
             <tbody>
+                {{-- Loop through all products --}}
                 @forelse ($products as $product)
                     @php
+                        // Decode metafields if stored as JSON string
                         $metafieldMap = is_array($product->metafields)
                             ? $product->metafields
                             : (json_decode($product->metafields, true) ?? []);
                     @endphp
 
                     <tr>
+                        {{-- Product Image --}}
                         <td>
                             @if ($product->image_url)
                                 <img src="{{ $product->image_url }}" alt="Product Image" class="img-thumbnail">
@@ -106,22 +120,33 @@
                                 <span class="text-muted">No Image</span>
                             @endif
                         </td>
+
+                        {{-- Product Title --}}
                         <td class="text-start">{{ $product->title }}</td>
+
+                        {{-- Product Price --}}
                         <td>₹{{ number_format($product->price ?? 0, 2) }}</td>
+
+                        {{-- SKU --}}
                         <td>{{ $product->sku ?? 'N/A' }}</td>
+
+                        {{-- Stock Quantity --}}
                         <td>{{ $product->inventory_quantity ?? 'N/A' }}</td>
 
+                        {{-- Display pinned metafields --}}
                         @foreach ($pinnedKeys as $key)
                             <td class="text-start w-meta">
                                 {{ $metafieldMap[$key] ?? 'N/A' }}
                             </td>
                         @endforeach
 
+                        {{-- Action buttons (Edit) --}}
                         <td>
                             <a href="{{ route('products.edit', $product->id) }}" class="btn btn-sm btn-primary">Edit</a>
                         </td>
                     </tr>
                 @empty
+                    {{-- No products case --}}
                     <tr>
                         <td colspan="100%" class="text-center">No products found.</td>
                     </tr>
@@ -131,6 +156,7 @@
     </div>
 </div>
 
+{{-- Bootstrap JS --}}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
