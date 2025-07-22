@@ -10,20 +10,23 @@ class Kernel extends ConsoleKernel
     /**
      * Register custom Artisan commands for the application.
      * This allows Laravel to recognize and execute custom commands,
-     * such as SyncShopifyProducts.
+     * such as SyncShopifyProducts and SyncShopifyLocations.
      */
     protected $commands = [
         \App\Console\Commands\SyncShopifyProducts::class,
+        \App\Console\Commands\SyncShopifyLocations::class,
     ];
 
     /**
      * Define the application's scheduled tasks.
-     * This schedules the `shopify:sync-products` command
-     * to run every five minutes.
+     * This schedules:
+     * - shopify:sync-products command to run every five minutes.
+     * - shopify:sync-locations command to run hourly.
      */
     protected function schedule(Schedule $schedule)
     {
         $schedule->command('shopify:sync-products')->everyFiveMinutes();
+        $schedule->command('shopify:sync-locations')->hourly();
     }
 
     /**

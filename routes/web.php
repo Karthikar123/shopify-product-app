@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ProductController;
 use App\Services\ShopifyProductService;
+use App\Http\Controllers\LocationController;
 
 // Show all products 
 Route::get('/products', [ProductController::class, 'showProducts'])->name('products.index');
@@ -20,3 +21,8 @@ Route::get('/sync-now', function () {
     (new ShopifyProductService)->fetchAndStoreProducts();
     return redirect()->route('products.index')->with('success', 'Products synced successfully!');
 })->name('products.sync.now');
+
+
+// Display synced locations
+Route::get('/locations', [LocationController::class, 'index'])->name('locations.index');
+Route::get('/locations/sync', [LocationController::class, 'syncNow'])->name('locations.sync.now');
