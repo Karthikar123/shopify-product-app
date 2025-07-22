@@ -24,5 +24,19 @@ Route::get('/sync-now', function () {
 
 
 // Display synced locations
+// New Menu Routes
+Route::get('/', function () {
+    return view('home');
+})->name('home');
+
+Route::get('/about', function () {
+    return view('about');
+})->name('about');
+
+Route::get('/inventory', function () {
+    return view('inventory.index');
+})->name('inventory.index');
+
+// Locations
 Route::get('/locations', [LocationController::class, 'index'])->name('locations.index');
 Route::get('/locations/sync', [LocationController::class, 'syncNow'])->name('locations.sync.now');
